@@ -128,7 +128,7 @@ def generate_description(image):
     Uses pre-trained BLIP model (no fine-tuning).
     """
     captioner = load_image_captioner()
-    result = captioner(image, max_new_tokens=50)
+    result = captioner(image, text="a photo of", max_new_tokens=50)
     # Handle different output formats across transformers versions
     if isinstance(result, list) and len(result) > 0:
         item = result[0]
@@ -196,54 +196,36 @@ def calculate_warning_threshold(shelf_life_days):
 
 
 def calculate_risk_score(category, freshness, days_since_entry,
-                         shelf_life_days, seasonal_factor,
-                         profit_margin, daily_sales):
+                         shelf_life_days, seasonal_factor):
     """
     Calculate overall expiry risk score (0-100, higher = more urgent).
     
     Factors:
-    - Time urgency: how close to the warning threshold
-    - Freshness decay: detected freshness from Pipeline 2
-    - Seasonal pressure: summer = higher risk
-    - Profit impact: low-profit items are lower priority to rescue
-    - Sales velocity: slow-selling items have higher overstock risk
+    - Time urgency: how close to the warning threshold (0-50)
+    - Freshness decay: detected freshness from Pipeline 2 (0-30)
+    - Seasonal pressure: summer = higher risk (0-20)
     """
     if category == "non_perishable":
         return 0.0  # No expiry risk for non-perishable items
 
-    # Factor 1: Time urgency (0-40 points)
+    # Factor 1: Time urgency (0-50 points)
     warning_days = calculate_warning_threshold(shelf_life_days)
     if days_since_entry >= shelf_life_days:
-        time_score = 40  # Already expired
+        time_score = 50  # Already expired
     elif days_since_entry >= warning_days:
-        time_score = 30 + 10 * (days_since_entry - warning_days) / max(shelf_life_days - warning_days, 1)
+        time_score = 35 + 15 * (days_since_entry - warning_days) / max(shelf_life_days - warning_days, 1)
     else:
-        time_score = 30 * (days_since_entry / max(warning_days, 1))
+        time_score = 35 * (days_since_entry / max(warning_days, 1))
 
-    # Factor 2: Freshness decay (0-25 points)
-    freshness_map = {"fresh": 0, "medium_fresh": 15, "rotten": 25}
-    freshness_score = freshness_map.get(freshness, 10)
+    # Factor 2: Freshness decay (0-30 points)
+    freshness_map = {"fresh": 0, "medium_fresh": 18, "rotten": 30}
+    freshness_score = freshness_map.get(freshness, 12)
 
-    # Factor 3: Seasonal pressure (0-15 points)
-    seasonal_score = 15 * ((seasonal_factor - 0.8) / 0.6)
-    seasonal_score = max(0, min(15, seasonal_score))
+    # Factor 3: Seasonal pressure (0-20 points)
+    seasonal_score = 20 * ((seasonal_factor - 0.8) / 0.6)
+    seasonal_score = max(0, min(20, seasonal_score))
 
-    # Factor 4: Sales velocity risk (0-10 points)
-    # If estimated days to sell remaining stock > remaining shelf life → high risk
-    remaining_shelf = max(shelf_life_days - days_since_entry, 0)
-    if daily_sales > 0:
-        # Assume 100 units in stock (user can adjust)
-        days_to_sell = 100 / daily_sales
-        velocity_score = min(10, 10 * (days_to_sell / max(remaining_shelf, 1)))
-    else:
-        velocity_score = 10  # No sales = maximum risk
-
-    # Factor 5: Profit impact adjustment (0-10 points)
-    # Low margin items → less worth saving → slightly lower priority
-    profit_score = 10 * (1 - profit_margin / 100)
-    profit_score = max(0, min(10, profit_score))
-
-    total = time_score + freshness_score + seasonal_score + velocity_score + profit_score
+    total = time_score + freshness_score + seasonal_score
     return min(100, max(0, total))
 
 
@@ -378,28 +360,12 @@ def main():
             help="Product's total shelf life in days"
         )
 
-        st.subheader("📊 Sales Info")
-        daily_sales = st.slider(
-            "Daily sales volume (units)",
-            min_value=0, max_value=500, value=50,
-            help="Average daily sales for this product"
-        )
-
-        st.subheader("💰 Profit")
-        profit_margin = st.slider(
-            "Profit margin (%)",
-            min_value=1, max_value=80, value=15
-        )
-
         st.subheader("🌡️ Seasonal Factor")
         current_month = datetime.now().month
-        default_seasonal = SEASONAL_FACTORS[current_month]
-        seasonal_factor = st.slider(
-            "Seasonal multiplier",
-            min_value=0.5, max_value=2.0,
-            value=default_seasonal, step=0.1,
-            help=f"Current month ({current_month}) default: {default_seasonal}. "
-                 f"Higher = faster spoilage (e.g., summer)."
+        seasonal_factor = SEASONAL_FACTORS[current_month]
+        st.info(
+            f"Current month: **{current_month}** → Seasonal multiplier: **{seasonal_factor}**\n\n"
+            f"Summer (Jun-Aug) = higher risk, Winter (Dec-Feb) = lower risk"
         )
 
         st.divider()
@@ -446,8 +412,7 @@ def main():
             days_since_entry = (datetime.now().date() - entry_date).days
             risk_score = calculate_risk_score(
                 category, freshness, days_since_entry,
-                shelf_life_input, seasonal_factor,
-                profit_margin, daily_sales
+                shelf_life_input, seasonal_factor
             )
             rec_label, rec_text, rec_color = get_recommendation(risk_score, category)
 
