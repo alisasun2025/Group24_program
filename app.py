@@ -35,9 +35,7 @@ def load_shelf_life_classifier():
 def load_freshness_detector():
     detector = pipeline(
         "image-classification",
-        # TODO: Replace with your best fine-tuned model after experiments
-        # e.g., "your-username/vit-fruit-freshness"
-        model="google/vit-base-patch16-224"
+        model="Alisa-Sun/freshness-detection"
     )
     return detector
 
