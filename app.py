@@ -45,6 +45,7 @@ def load_freshness_detector():
 @st.cache_resource
 def load_image_captioner():
     captioner = pipeline(
+        "image-text-to-text",
         model="Salesforce/blip-image-captioning-base"
     )
     return captioner
@@ -128,7 +129,17 @@ def generate_description(image):
     """
     captioner = load_image_captioner()
     result = captioner(image, max_new_tokens=50)
-    description = result[0]["generated_text"]
+    # Handle different output formats across transformers versions
+    if isinstance(result, list) and len(result) > 0:
+        item = result[0]
+        if isinstance(item, dict):
+            description = item.get("generated_text", item.get("text", str(item)))
+        elif isinstance(item, list) and len(item) > 0:
+            description = item[0].get("generated_text", item[0].get("text", str(item[0])))
+        else:
+            description = str(item)
+    else:
+        description = str(result)
     return description
 
 
