@@ -45,7 +45,6 @@ def load_freshness_detector():
 @st.cache_resource
 def load_image_captioner():
     captioner = pipeline(
-        "image-to-text",
         model="Salesforce/blip-image-captioning-base"
     )
     return captioner
