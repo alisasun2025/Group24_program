@@ -17,13 +17,13 @@ from PIL import Image
 # ============================================================
 
 # Pipeline 1: Product image → Shelf-life category classification
-# Uses pre-trained ViT directly (NO fine-tuning)
-# ImageNet labels are mapped to shelf-life categories via rule-based logic
+# ⭐ FINE-TUNED MODEL ⭐
+# Fine-tuned on Grocery Store + Household Products dataset
 @st.cache_resource
 def load_shelf_life_classifier():
     classifier = pipeline(
         "image-classification",
-        model="google/vit-base-patch16-224"
+        model="Alisa-Sun/shelf-life-classification"
     )
     return classifier
 
@@ -58,38 +58,16 @@ def load_image_captioner():
 def classify_shelf_life(image):
     """
     Pipeline 1: Classify product image into shelf-life category.
-    Uses pre-trained ViT (ImageNet) + rule-based keyword mapping.
-    No fine-tuning — the mapping logic converts ImageNet labels to:
-    - "short_shelf" (鲜奶/蔬果/熟食, ~1-7 days)
+    Fine-tuned model directly outputs:
+    - "short_shelf" (蔬果/熟食, ~1-7 days)
     - "medium_shelf" (罐头/饮料/调味品, weeks to months)
     - "non_perishable" (纸巾/洗涤用品, no expiry concern)
     """
     classifier = load_shelf_life_classifier()
     results = classifier(image, top_k=3)
 
-    # Rule-based mapping: ImageNet labels → shelf-life categories
-    short_shelf_keywords = [
-        "banana", "orange", "strawberry", "apple", "lemon",
-        "broccoli", "cucumber", "mushroom", "meat", "egg",
-        "milk", "cream", "ice cream", "bakery", "bread",
-        "grocery", "fruit", "vegetable", "food", "pizza",
-        "hotdog", "pretzel", "bagel", "dough", "burrito"
-    ]
-    medium_shelf_keywords = [
-        "bottle", "can", "jar", "packet", "carton",
-        "sauce", "wine", "beer", "juice", "water", "pop",
-        "cup", "coffee", "espresso", "soap", "lotion"
-    ]
-
-    top_label = results[0]["label"].lower()
+    category = results[0]["label"]
     top_score = results[0]["score"]
-
-    if any(kw in top_label for kw in short_shelf_keywords):
-        category = "short_shelf"
-    elif any(kw in top_label for kw in medium_shelf_keywords):
-        category = "medium_shelf"
-    else:
-        category = "non_perishable"
 
     return category, top_score, results
 
@@ -218,8 +196,8 @@ def calculate_risk_score(category, freshness, days_since_entry,
         time_score = 35 * (days_since_entry / max(warning_days, 1))
 
     # Factor 2: Freshness decay (0-30 points)
-    freshness_map = {"fresh": 0, "medium_fresh": 18, "rotten": 30}
-    freshness_score = freshness_map.get(freshness, 12)
+    freshness_map = {"fresh": 0, "medium_fresh": 18, "rotten": 30, "N/A": 0}
+    freshness_score = freshness_map.get(freshness, 0)
 
     # Factor 3: Seasonal pressure (0-20 points)
     seasonal_score = 20 * ((seasonal_factor - 0.8) / 0.6)
@@ -404,9 +382,15 @@ def main():
             with st.spinner("Classifying product shelf-life category..."):
                 category, cat_conf, cat_details = classify_shelf_life(image)
 
-            # Pipeline 2: Freshness detection
-            with st.spinner("Detecting product freshness..."):
-                freshness, fresh_conf, fresh_details = detect_freshness(image)
+            # Pipeline 2: Freshness detection (only for short_shelf products)
+            if category == "short_shelf":
+                with st.spinner("Detecting product freshness..."):
+                    freshness, fresh_conf, fresh_details = detect_freshness(image)
+            else:
+                # Non-perishable and medium_shelf: skip freshness check
+                freshness = "N/A"
+                fresh_conf = 0.0
+                fresh_details = []
 
             # Calculate business metrics
             days_since_entry = (datetime.now().date() - entry_date).days
@@ -431,15 +415,16 @@ def main():
                 """, unsafe_allow_html=True)
 
             with r1c2:
-                freshness_emoji = {"fresh": "🟢 Fresh", "medium_fresh": "🟡 Medium", "rotten": "🔴 Rotten"}
-                freshness_colors = {"fresh": "#27ae60", "medium_fresh": "#f39c12", "rotten": "#e74c3c"}
+                freshness_emoji = {"fresh": "🟢 Fresh", "medium_fresh": "🟡 Medium", "rotten": "🔴 Rotten", "N/A": "⚪ N/A"}
+                freshness_colors = {"fresh": "#27ae60", "medium_fresh": "#f39c12", "rotten": "#e74c3c", "N/A": "#888"}
+                freshness_sub = "Visual freshness detection · Confidence: {:.1%}".format(fresh_conf) if category == "short_shelf" else "Freshness check skipped — not a perishable product"
                 st.markdown(f"""
                 <div class="metric-card">
                     <h3>Freshness level</h3>
                     <div class="value" style="color: {freshness_colors.get(freshness, '#333')}">
                         {freshness_emoji.get(freshness, freshness)}
                     </div>
-                    <div class="sub">Visual freshness detection · Confidence: {fresh_conf:.1%}</div>
+                    <div class="sub">{freshness_sub}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
