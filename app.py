@@ -142,7 +142,7 @@ CATEGORY_INFO = {
     },
     "medium_shelf": {
         "label": "🥫 Medium shelf-life",
-        "label_cn": "Packaged goods (canned food, drinks, condiments)",
+        "label_cn": "Packaged dairy and beverages (milk, juice, yoghurt)",
         "color": "#f39c12",
         "warning_ratio": 0.8
     },
