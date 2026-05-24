@@ -136,19 +136,19 @@ SHELF_LIFE_DEFAULTS = {
 CATEGORY_INFO = {
     "short_shelf": {
         "label": "🥬 Short shelf-life",
-        "label_cn": "短保商品（鲜奶/蔬果/熟食）",
+        "label_cn": "Perishable goods (dairy, fruits, vegetables)",
         "color": "#e74c3c",
         "warning_ratio": 0.8
     },
     "medium_shelf": {
         "label": "🥫 Medium shelf-life",
-        "label_cn": "中长保商品（罐头/饮料/调味品）",
+        "label_cn": "Packaged goods (canned food, drinks, condiments)",
         "color": "#f39c12",
         "warning_ratio": 0.8
     },
     "non_perishable": {
         "label": "🧻 Non-perishable",
-        "label_cn": "无需考虑保质期（纸巾/洗涤用品）",
+        "label_cn": "Non-perishable (tissue, cleaning supplies)",
         "color": "#27ae60",
         "warning_ratio": None
     }
@@ -340,10 +340,13 @@ def main():
 
         st.subheader("🌡️ Seasonal Factor")
         current_month = datetime.now().month
-        seasonal_factor = SEASONAL_FACTORS[current_month]
-        st.info(
-            f"Current month: **{current_month}** → Seasonal multiplier: **{seasonal_factor}**\n\n"
-            f"Summer (Jun-Aug) = higher risk, Winter (Dec-Feb) = lower risk"
+        default_seasonal = SEASONAL_FACTORS[current_month]
+        seasonal_factor = st.slider(
+            "Seasonal multiplier",
+            min_value=0.5, max_value=2.0,
+            value=default_seasonal, step=0.1,
+            help=f"Auto-set for current month ({current_month}). "
+                 f"Higher = faster spoilage (summer). Lower = slower (winter)."
         )
 
         st.divider()
