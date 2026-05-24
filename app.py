@@ -340,13 +340,19 @@ def main():
 
         st.subheader("🌡️ Seasonal Factor")
         current_month = datetime.now().month
-        default_seasonal = SEASONAL_FACTORS[current_month]
-        seasonal_factor = st.slider(
-            "Seasonal multiplier",
-            min_value=0.5, max_value=2.0,
-            value=default_seasonal, step=0.1,
-            help=f"Auto-set for current month ({current_month}). "
-                 f"Higher = faster spoilage (summer). Lower = slower (winter)."
+        selected_month = st.slider(
+            "Month",
+            min_value=1, max_value=12,
+            value=current_month,
+            help="Select month to simulate seasonal impact on spoilage"
+        )
+        month_names = {1:"Jan", 2:"Feb", 3:"Mar", 4:"Apr", 5:"May", 6:"Jun",
+                       7:"Jul", 8:"Aug", 9:"Sep", 10:"Oct", 11:"Nov", 12:"Dec"}
+        seasonal_factor = SEASONAL_FACTORS[selected_month]
+        st.info(
+            f"📅 **{month_names[selected_month]}** → Seasonal multiplier: **{seasonal_factor}**\n\n"
+            f"Seasonal risk score = 20 × ({seasonal_factor} - 0.8) / 0.6 = "
+            f"**{max(0, min(20, 20 * (seasonal_factor - 0.8) / 0.6)):.1f}** / 20 points"
         )
 
         st.divider()
