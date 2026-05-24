@@ -1,5 +1,5 @@
 # Program title: Smart Shelf Guard - Supermarket Expiry Warning System
-# Company: [Your Company Name, e.g., Yonghui Superstores / PARKnSHOP]
+# Company: ParknShop   https://www.parknshop.com/
 # Objective: Classify products by shelf-life category and detect freshness,
 #            combined with business factors to generate expiry risk alerts.
 
@@ -8,9 +8,13 @@
 # ============================================================
 import streamlit as st
 import numpy as np
+import torch
 from datetime import datetime, timedelta
 from transformers import pipeline
 from PIL import Image
+
+# Auto-detect GPU
+DEVICE = 0 if torch.cuda.is_available() else -1
 
 # ============================================================
 # Model loading part (cached so models load only once)
@@ -23,7 +27,8 @@ from PIL import Image
 def load_shelf_life_classifier():
     classifier = pipeline(
         "image-classification",
-        model="Alisa-Sun/shelf-life-classification"
+        model="Alisa-Sun/shelf-life-classification",
+        device=DEVICE
     )
     return classifier
 
@@ -35,7 +40,8 @@ def load_shelf_life_classifier():
 def load_freshness_detector():
     detector = pipeline(
         "image-classification",
-        model="Alisa-Sun/freshness-detection"
+        model="Alisa-Sun/freshness-detection",
+        device=DEVICE
     )
     return detector
 
@@ -46,7 +52,8 @@ def load_freshness_detector():
 def load_image_captioner():
     captioner = pipeline(
         "image-text-to-text",
-        model="Salesforce/blip-image-captioning-base"
+        model="Salesforce/blip-image-captioning-large",
+        device=DEVICE
     )
     return captioner
 
@@ -59,9 +66,9 @@ def classify_shelf_life(image):
     """
     Pipeline 1: Classify product image into shelf-life category.
     Fine-tuned model directly outputs:
-    - "short_shelf" (蔬果/熟食, ~1-7 days)
-    - "medium_shelf" (罐头/饮料/调味品, weeks to months)
-    - "non_perishable" (纸巾/洗涤用品, no expiry concern)
+    - "short_shelf" (fruits, vegetables, dairy, ~1-7 days)
+    - "medium_shelf" (packaged beverages, weeks to months)
+    - "non_perishable" (tissue, cleaning supplies, no expiry concern)
     """
     classifier = load_shelf_life_classifier()
     results = classifier(image, top_k=3)
@@ -74,11 +81,12 @@ def classify_shelf_life(image):
 
 def detect_freshness(image):
     """
-    Pipeline 2: Detect product freshness level. ⭐ FINE-TUNED MODEL
+    Pipeline 2: Detect product freshness level. (FINE-TUNED MODEL)
     The fine-tuned model directly outputs:
-    - "fresh" (新鲜, safe to sell)
-    - "rotten" (变质, should be discarded/discounted)
+    - "fresh" (safe to sell)
+    - "rotten" (should be discarded or discounted)
     
+    Only runs for short_shelf products.
     Model is fine-tuned on fresh/rotten fruit dataset.
     Three candidate models compared: ViT vs ResNet vs Swin.
     """
@@ -136,19 +144,19 @@ SHELF_LIFE_DEFAULTS = {
 CATEGORY_INFO = {
     "short_shelf": {
         "label": "🥬 Short shelf-life",
-        "label_cn": "Perishable goods (dairy, fruits, vegetables)",
+        "description": "Perishable goods (dairy, fruits, vegetables)",
         "color": "#e74c3c",
         "warning_ratio": 0.8
     },
     "medium_shelf": {
         "label": "🥫 Medium shelf-life",
-        "label_cn": "Packaged dairy and beverages (milk, juice, yoghurt)",
+        "description": "Packaged dairy and beverages (milk, juice, yoghurt)",
         "color": "#f39c12",
         "warning_ratio": 0.8
     },
     "non_perishable": {
         "label": "🧻 Non-perishable",
-        "label_cn": "Non-perishable (tissue, cleaning supplies)",
+        "description": "Non-perishable (tissue, cleaning supplies)",
         "color": "#27ae60",
         "warning_ratio": None
     }
@@ -180,7 +188,7 @@ def calculate_risk_score(category, freshness, days_since_entry,
     
     For short_shelf: Time(50) + Freshness(30) + Seasonal(20) = 100
     For medium_shelf: Time(80) + Seasonal(20) = 100 (no freshness check)
-    Already expired → always 95
+    Already expired → returns -1 (special flag, displayed as EXPIRED)
     """
     if category == "non_perishable":
         return 0.0
@@ -435,7 +443,7 @@ def main():
                 <div class="metric-card">
                     <h3>Shelf-life category</h3>
                     <div class="value" style="color: {cat_info['color']}">{cat_info['label']}</div>
-                    <div class="sub">{cat_info['label_cn']} · Confidence: {cat_conf:.1%}</div>
+                    <div class="sub">{cat_info['description']} · Confidence: {cat_conf:.1%}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -517,7 +525,7 @@ def main():
             <div class="metric-card">
                 <h3>Pipeline 1</h3>
                 <div class="value" style="font-size:20px">🏷️ Shelf-life classify</div>
-                <div class="sub">ViT fine-tuned on grocery images → short / medium / non-perishable</div>
+                <div class="sub">Fine-tuned model → short_shelf / medium_shelf / non_perishable</div>
             </div>
             """, unsafe_allow_html=True)
         with col2:
@@ -525,7 +533,7 @@ def main():
             <div class="metric-card">
                 <h3>Pipeline 2</h3>
                 <div class="value" style="font-size:20px">🔬 Freshness detect</div>
-                <div class="sub">ResNet/Swin fine-tuned on fresh/rotten dataset → fresh / medium / rotten</div>
+                <div class="sub">Fine-tuned model → fresh / rotten (short_shelf products only)</div>
             </div>
             """, unsafe_allow_html=True)
         with col3:
@@ -533,7 +541,7 @@ def main():
             <div class="metric-card">
                 <h3>Pipeline 3</h3>
                 <div class="value" style="font-size:20px">📝 Image captioning</div>
-                <div class="sub">BLIP pre-trained → auto-generated product description</div>
+                <div class="sub">Pre-trained BLIP → auto-generated product description</div>
             </div>
             """, unsafe_allow_html=True)
 
