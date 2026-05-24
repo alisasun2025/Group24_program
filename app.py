@@ -178,32 +178,45 @@ def calculate_risk_score(category, freshness, days_since_entry,
     """
     Calculate overall expiry risk score (0-100, higher = more urgent).
     
-    Factors:
-    - Time urgency: how close to the warning threshold (0-50)
-    - Freshness decay: detected freshness from Pipeline 2 (0-30)
-    - Seasonal pressure: summer = higher risk (0-20)
+    For short_shelf: Time(50) + Freshness(30) + Seasonal(20) = 100
+    For medium_shelf: Time(80) + Seasonal(20) = 100 (no freshness check)
+    Already expired → always 95
     """
     if category == "non_perishable":
-        return 0.0  # No expiry risk for non-perishable items
+        return 0.0
 
-    # Factor 1: Time urgency (0-50 points)
     warning_days = calculate_warning_threshold(shelf_life_days)
+
+    # Already expired → return special flag
     if days_since_entry >= shelf_life_days:
-        time_score = 50  # Already expired
-    elif days_since_entry >= warning_days:
-        time_score = 35 + 15 * (days_since_entry - warning_days) / max(shelf_life_days - warning_days, 1)
-    else:
-        time_score = 35 * (days_since_entry / max(warning_days, 1))
+        return -1  # expired flag, handled in display
 
-    # Factor 2: Freshness decay (0-30 points)
-    freshness_map = {"fresh": 0, "medium_fresh": 18, "rotten": 30, "N/A": 0}
-    freshness_score = freshness_map.get(freshness, 0)
-
-    # Factor 3: Seasonal pressure (0-20 points)
+    # Factor: Seasonal pressure (0-20 points)
     seasonal_score = 20 * ((seasonal_factor - 0.8) / 0.6)
     seasonal_score = max(0, min(20, seasonal_score))
 
-    total = time_score + freshness_score + seasonal_score
+    if category == "short_shelf":
+        # Time urgency (0-50 points)
+        if days_since_entry >= warning_days:
+            time_score = 35 + 15 * (days_since_entry - warning_days) / max(shelf_life_days - warning_days, 1)
+        else:
+            time_score = 35 * (days_since_entry / max(warning_days, 1))
+
+        # Freshness from Pipeline 2 (0-30 points)
+        freshness_map = {"fresh": 0, "medium_fresh": 18, "rotten": 30, "N/A": 0}
+        freshness_score = freshness_map.get(freshness, 0)
+
+        total = time_score + freshness_score + seasonal_score
+
+    else:
+        # medium_shelf: no freshness check, time weighs more (0-80 points)
+        if days_since_entry >= warning_days:
+            time_score = 55 + 25 * (days_since_entry - warning_days) / max(shelf_life_days - warning_days, 1)
+        else:
+            time_score = 55 * (days_since_entry / max(warning_days, 1))
+
+        total = time_score + seasonal_score
+
     return min(100, max(0, total))
 
 
@@ -211,6 +224,9 @@ def get_recommendation(risk_score, category):
     """Generate actionable recommendation based on risk score."""
     if category == "non_perishable":
         return "🟢 Safe", "Normal stocking, no expiry concern.", "#27ae60"
+
+    if risk_score == -1:
+        return "⛔ Expired", "Product has exceeded its shelf life. Remove from shelf immediately.", "#8b0000"
 
     if risk_score >= 70:
         return "🔴 Urgent", "Immediate discount or removal from shelf. Consider donation if still safe.", "#e74c3c"
@@ -440,23 +456,38 @@ def main():
             # Row 2: Risk Score + Recommendation
             r2c1, r2c2 = st.columns(2)
             with r2c1:
-                bar_color = "#e74c3c" if risk_score >= 70 else "#f39c12" if risk_score >= 40 else "#27ae60"
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h3>Expiry risk score</h3>
-                    <div class="value" style="color: {bar_color}">{risk_score:.0f} / 100</div>
-                    <div class="risk-bar">
-                        <div class="risk-fill" style="width: {risk_score}%; background: {bar_color}"></div>
+                if risk_score == -1:
+                    # Expired
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h3>Expiry risk score</h3>
+                        <div class="value" style="color: #8b0000">⛔ EXPIRED</div>
+                        <div class="risk-bar">
+                            <div class="risk-fill" style="width: 100%; background: #8b0000"></div>
+                        </div>
+                        <div class="sub">
+                            Day {days_since_entry} of {shelf_life_input} — exceeded shelf life by {days_since_entry - shelf_life_input} days
+                        </div>
                     </div>
-                    <div class="sub">
-                        Day {days_since_entry} of {shelf_life_input} · 
-                        Warning at day {calculate_warning_threshold(shelf_life_input)}
+                    """, unsafe_allow_html=True)
+                else:
+                    bar_color = "#e74c3c" if risk_score >= 70 else "#f39c12" if risk_score >= 40 else "#27ae60"
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h3>Expiry risk score</h3>
+                        <div class="value" style="color: {bar_color}">{risk_score:.0f} / 100</div>
+                        <div class="risk-bar">
+                            <div class="risk-fill" style="width: {risk_score}%; background: {bar_color}"></div>
+                        </div>
+                        <div class="sub">
+                            Day {days_since_entry} of {shelf_life_input} · 
+                            Warning at day {calculate_warning_threshold(shelf_life_input)}
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
             with r2c2:
-                bg_map = {"🔴 Urgent": "#ffeaea", "🟡 Warning": "#fff8e1", "🟢 Safe": "#eafff0"}
+                bg_map = {"🔴 Urgent": "#ffeaea", "🟡 Warning": "#fff8e1", "🟢 Safe": "#eafff0", "⛔ Expired": "#f5d0d0"}
                 st.markdown(f"""
                 <div class="metric-card">
                     <h3>Recommendation</h3>
