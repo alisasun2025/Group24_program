@@ -517,31 +517,39 @@ def main():
                     st.write(f"- {r['label']}: {r['score']:.4f}")
 
     else:
-        # Show placeholder when no image is uploaded
+        # Show usage instructions when no image is uploaded
         st.markdown("---")
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
             st.markdown("""
             <div class="metric-card">
-                <h3>Pipeline 1</h3>
-                <div class="value" style="font-size:20px">🏷️ Shelf-life classify</div>
-                <div class="sub">Fine-tuned model → short_shelf / medium_shelf / non_perishable</div>
+                <h3>Step 1</h3>
+                <div class="value" style="font-size:20px">📷 Upload Image</div>
+                <div class="sub">Upload a product image above to start analysis</div>
             </div>
             """, unsafe_allow_html=True)
-        with col2:
+        with c2:
             st.markdown("""
             <div class="metric-card">
-                <h3>Pipeline 2</h3>
-                <div class="value" style="font-size:20px">🔬 Freshness detect</div>
-                <div class="sub">Fine-tuned model → fresh / rotten (short_shelf products only)</div>
+                <h3>Step 2</h3>
+                <div class="value" style="font-size:20px">📅 Set Entry Date</div>
+                <div class="sub">Enter the warehouse entry date in the sidebar</div>
             </div>
             """, unsafe_allow_html=True)
-        with col3:
+        with c3:
             st.markdown("""
             <div class="metric-card">
-                <h3>Pipeline 3</h3>
-                <div class="value" style="font-size:20px">📝 Image captioning</div>
-                <div class="sub">Pre-trained BLIP → auto-generated product description</div>
+                <h3>Step 3</h3>
+                <div class="value" style="font-size:20px">⚙️ Adjust Parameters</div>
+                <div class="sub">Set shelf life duration and seasonal month</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c4:
+            st.markdown("""
+            <div class="metric-card">
+                <h3>Step 4</h3>
+                <div class="value" style="font-size:20px">📊 View Results</div>
+                <div class="sub">Check risk score, freshness, and recommendations</div>
             </div>
             """, unsafe_allow_html=True)
 
